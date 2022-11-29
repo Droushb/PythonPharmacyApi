@@ -4,6 +4,7 @@ from flask import Flask, jsonify
 from sqlalchemy import select
 from main import User, Status, Drug, Order, OrderDetails
 from models import session
+import sqlalchemy
 
 def serialize(self):
      return {
@@ -30,13 +31,15 @@ def get_drugs():
         result+= json.dumps(drugJSON)
     return result
 
+
 def get_drug_byid(id):
     drug = session.query(Drug).filter_by(idDrug = id).one()
+    status = session.query(Status).filter_by(idStatus = drug.idStatus).one()
     drugJSON = {
         "Id": drug.idDrug,
         "Name": drug.Name,
         "Price": drug.Price,
-        "idStatus": drug.idStatus
+        "Status": status.Name
     }
     return json.dumps(drugJSON)
 
@@ -93,18 +96,18 @@ def get_order_byid(id):
             "Drug Name": drug.Name,
             "Quantity": i.quantity
         }
-        orderDetailsString+= json.dumps(orderdetailsJSON)
+        orderDetailsString+= json.dumps(orderdetailsJSON)+" , "
     orderJSON = {
         "Id": order.idOrder,
         "UserName": user.UserName,
         "Status": status.Name
     }
-    return json.dumps(orderJSON)+orderDetailsString
+    return json.dumps(orderJSON)+" , "+orderDetailsString
 
 def post_order(id, idUser, idStatus, items):
     addedorder = Order(idOrder=id, idUser=idUser, idStatus=idStatus)
     session.add(addedorder)
-    for item in items['items']:
+    for item in items:
         addedorderdetails = OrderDetails(idOrder=id, idDrug=item['idDrug'], quantity=item['quantity'])
         session.add(addedorderdetails)
     session.commit()
@@ -112,6 +115,9 @@ def post_order(id, idUser, idStatus, items):
 
 def delete_order(id):
     orderToDelete = session.query(Order).filter_by(idOrder = id).one()
+    while session.query(OrderDetails).filter_by(idOrder = id).first() is not None:
+        orderDetailsToDelete =  session.query(OrderDetails).filter_by(idOrder = id).first()
+        session.delete(orderDetailsToDelete)
     session.delete(orderToDelete)
     session.commit()
     return 'Removed Order with id %s' % id
@@ -151,10 +157,8 @@ def post_user(id, UserName, firstName, lastName, email, password, phone, role):
     session.commit()
     return 'Added a User with id %s' % id + get_user_byUserName(UserName)
 
-def update_user(id, UserName, firstName, lastName, email, password, phone):
-    updatedUser = session.query(User).filter_by(UserName = UserName).one()
-    if UserName!='':
-        updatedUser.UserName = UserName
+def update_user(userName, firstName, lastName, email, password, phone):
+    updatedUser = session.query(User).filter_by(UserName = userName).first()
     if firstName!='':
         updatedUser.FirstName = firstName
     if lastName!='':
@@ -167,7 +171,7 @@ def update_user(id, UserName, firstName, lastName, email, password, phone):
         updatedUser.Phone = phone
     session.add(updatedUser)
     session.commit()
-    return 'Updated a User with UserName %s' % UserName + get_user_byUserName(UserName)
+    return 'Updated a User with UserName %s' % userName + get_user_byUserName(userName)
 
 def delete_user(UserName):
     userToDelete = session.query(User).filter_by(UserName = UserName).one()

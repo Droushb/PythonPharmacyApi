@@ -6,10 +6,11 @@ from functools import wraps
 from datetime import timedelta
 from sqlalchemy.exc import IntegrityError, NoResultFound
 from main import User
+import pytest
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = 'd5fb8c4fa8bd46638dadc4e751e0d68d'
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=1)
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=4)
 app.config['JWT_BLACKLIST_ENABLED'] = True
 app.config['JWT_BLACKLIST_TOKEN_CHECKS'] = ['access', 'refresh']
 
@@ -20,6 +21,12 @@ blacklist = set()
 def check_if_token_in_blacklist(some, decrypted_token):
     jti = decrypted_token['jti']
     return jti in blacklist
+
+
+def check_if_token_is_revoked(some, token):
+    jti = token["jti"]
+    token_in_redis = blacklist.get(jti)
+    return token_in_redis is not None
 
 def admin_required():
     def wrapper(fn):
@@ -59,10 +66,10 @@ def drug_get_byid(id):
 @admin_required()
 def drug_post():
 	try:
-		id = request.args.get('id', '')
-		name = request.args.get('name', '')
-		price = request.args.get('price', '')
-		idStatus = request.args.get('idStatus', '')
+		id = request.json.get('id', None)
+		name = request.json.get('name', None)
+		price = request.json.get('price', None)
+		idStatus = request.json.get('idStatus', None)
 		if id=='':
 			return 'Missing id', 400
 		if name=='':
@@ -93,7 +100,7 @@ def drug_delete(id):
 
 #ORDER
 @app.route('/orders', methods = ['GET'])
-@jwt_required()
+@admin_required()
 def orders_get():
 	try:
 		return get_orders()
@@ -111,10 +118,10 @@ def order_get_byid(id):
 @app.route('/order', methods = ['POST'])
 @jwt_required()
 def order_post():
-		id = request.args.get('id', '')
-		idUser = request.args.get('idUser', '')
-		idStatus = request.args.get('idStatus', '')
-		items = request.get_json()
+		id = request.json.get('Id', None)
+		idUser = request.json.get('idUser', None)
+		idStatus = request.json.get('idStatus', None)
+		items = request.json.get('items', None)
 		if idUser=='':
 			return 'Missing idUser', 400
 		if idStatus=='':
@@ -131,7 +138,7 @@ def order_delete(id):
 
 #STATUS
 @app.route('/statuses', methods = ['GET'])
-@jwt_required()
+@admin_required()
 def status_get():
 	try:
 		return get_status()
@@ -148,15 +155,14 @@ def user_get_byid(UserName):
 		return "User not found", 404
 
 @app.route('/user/<UserName>', methods = ['PUT'])
-@admin_required()
+@jwt_required()
 def user_update(UserName):
-       UserName = request.args.get('UserName', '')
-       firstName = request.args.get('firstName', '')
-       lastName = request.args.get('lastName', '')
-       email = request.args.get('email', '')
-       password = request.args.get('password', '')
-       phone = request.args.get('phone', '')
-       return update_user(id, UserName, firstName, lastName, email, password, phone)
+	firstName = request.args.get('firstName', '')
+	lastName = request.args.get('lastName', '')
+	email = request.args.get('email', '')
+	password = request.args.get('password', '')
+	phone = request.args.get('phone', '')
+	return update_user(UserName, firstName, lastName, email, password, phone)
 
 @app.route('/user/<UserName>', methods = ['DELETE'])
 @admin_required()
@@ -235,10 +241,6 @@ def login():
 def logout():
     jti = get_jwt()["jti"]
     blacklist.add(jti)
-    return jsonify(msg="Access token revoked")
-
-#@jwt_required()
-#@admin_required()
-
+    return "Logout successful"
 
 app.run()
